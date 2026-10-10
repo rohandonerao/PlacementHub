@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # AI-Driven Placement Management System
 
 Initial starter scaffold based on the technology plan. Development was listed as not started in the supplied plan.
@@ -42,3 +43,7 @@ On macOS/Linux, activate with `source .venv/bin/activate`.
 URLs: frontend http://localhost:5173, backend http://localhost:5000, Python service http://localhost:8000.
 
 This is a starter scaffold, not a finished system. The ATS score is an initial heuristic, not an official company ATS score or a trained predictive model. The next steps are testing locally, completing authentication and role dashboards, connecting the frontend to APIs, and adding the placement workflows.
+=======
+# PlacementHub
+Placement For Students
+>>>>>>> 1f7254db462dfb50f84332f06dbb34ccaca35587
