@@ -35,6 +35,8 @@ npm run dev
 cd ml-service
 python -m venv .venv
 .venv\Scripts\activate
+py -3.11 -m venv .venv311
+.\.venv311\Scripts\Activate.ps1    
 pip install -r requirements.txt
 uvicorn app:app --reload --port 8000
 ```
