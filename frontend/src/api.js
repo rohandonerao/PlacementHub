@@ -1,6 +1,6 @@
 import { loader } from "./loader";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://placementhub-1-s10w.onrender.com/api";
+const API_URL = import.meta.env.VITE_API_URL || "https://placement-backend-theta.vercel.app/api";
 
 // Every request drives the top loading bar. A 401 on a signed-in request means
 // the session expired or was revoked, so the app is told to sign the user out.
