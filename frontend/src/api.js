@@ -1,7 +1,24 @@
-const API_URL = "http://localhost:5000/api";
+import { loader } from "./loader";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+// Every request drives the top loading bar. A 401 on a signed-in request means
+// the session expired or was revoked, so the app is told to sign the user out.
+async function trackedFetch(url, options = {}) {
+  loader.start();
+  try {
+    const response = await fetch(url, options);
+    if (response.status === 401 && options.headers?.Authorization) {
+      window.dispatchEvent(new Event("session-expired"));
+    }
+    return response;
+  } finally {
+    loader.done();
+  }
+}
 
 async function request(endpoint, options = {}) {
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  const response = await trackedFetch(`${API_URL}${endpoint}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -31,6 +48,30 @@ export async function registerStudent(data) {
   });
 }
 
+export async function forgotPassword(email) {
+  return request("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email })
+  });
+}
+
+export async function resetPassword(token, password) {
+  return request("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password })
+  });
+}
+
+export async function changePassword(token, currentPassword, newPassword) {
+  return request("/auth/change-password", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+}
+
 export async function loginUser(data) {
   return request("/auth/login", {
     method: "POST",
@@ -45,7 +86,7 @@ export async function getStudentProfile(token) {
     }
   });
 
-  return result.user;
+  return { ...result.user, collegeDepartments: result.collegeDepartments || [] };
 }
 
 export async function deletePlacementDrive(token, driveId) {
@@ -75,7 +116,7 @@ export async function analyzeResume(token, resume, jobDescription) {
   formData.append("resume", resume);
   formData.append("job_description", jobDescription);
 
-  const response = await fetch(`${API_URL}/resume/analyze`, {
+  const response = await trackedFetch(`${API_URL}/resume/analyze`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`
@@ -174,6 +215,33 @@ export async function updateApplicationStatus(token, applicationId, status) {
       Authorization: `Bearer ${token}`
     },
     body: JSON.stringify({ status })
+  });
+}
+
+export async function getDepartments(token) {
+  return request("/admin/departments", {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+}
+
+export async function addDepartment(token, name) {
+  return request("/admin/departments", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ name })
+  });
+}
+
+export async function removeDepartment(token, name) {
+  return request(`/admin/departments/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
   });
 }
 

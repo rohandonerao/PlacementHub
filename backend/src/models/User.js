@@ -72,6 +72,31 @@ const userSchema = new mongoose.Schema(
       default: []
     },
 
+    projects: {
+      type: [String],
+      default: []
+    },
+
+    certifications: {
+      type: [String],
+      default: []
+    },
+
+    linkedin: {
+      type: String,
+      default: ""
+    },
+
+    github: {
+      type: String,
+      default: ""
+    },
+
+    portfolio: {
+      type: String,
+      default: ""
+    },
+
     isVerified: {
       type: Boolean,
       default: false
@@ -84,6 +109,18 @@ const userSchema = new mongoose.Schema(
     },
 
     emailVerificationExpires: {
+      type: Date,
+      default: null,
+      select: false
+    },
+
+    passwordResetToken: {
+      type: String,
+      default: null,
+      select: false
+    },
+
+    passwordResetExpires: {
       type: Date,
       default: null,
       select: false

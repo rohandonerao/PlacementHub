@@ -3,6 +3,12 @@ import express from "express";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
+import College from "../models/College.js";
+import {
+  departmentQuery,
+  findDepartment,
+  normalizeDepartment
+} from "../utils/departments.js";
 import { authenticate, authorize } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -13,6 +19,107 @@ const publicTpoFields =
   "name email role department phone college collegeId isVerified isActive createdAt updatedAt";
 
 const getCollegeId = (req) => req.user.collegeId;
+
+router.get("/departments", async (req, res) => {
+  try {
+    const college = await College.findById(getCollegeId(req)).lean();
+
+    return res.json({ departments: college?.departments || [] });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Unable to load departments."
+    });
+  }
+});
+
+router.post("/departments", async (req, res) => {
+  try {
+    const name = normalizeDepartment(req.body.name);
+
+    if (!name || name.length > 80) {
+      return res.status(400).json({
+        message: "Department name is required (up to 80 characters)."
+      });
+    }
+
+    const college = await College.findById(getCollegeId(req));
+
+    if (findDepartment(college, name)) {
+      return res.status(409).json({
+        message: `${name} is already in your department list.`
+      });
+    }
+
+    college.departments.push(name);
+    college.departments.sort((a, b) => a.localeCompare(b));
+    await college.save();
+
+    return res.status(201).json({
+      message: `Department ${name} added.`,
+      departments: college.departments
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Unable to add department."
+    });
+  }
+});
+
+router.delete("/departments/:name", async (req, res) => {
+  try {
+    const collegeId = getCollegeId(req);
+    const college = await College.findById(collegeId);
+    const name = findDepartment(college, req.params.name);
+
+    if (!name) {
+      return res.status(404).json({
+        message: "Department not found."
+      });
+    }
+
+    const assignedTpos = await User.countDocuments({
+      role: "tpo",
+      collegeId,
+      department: departmentQuery(name)
+    });
+
+    if (assignedTpos > 0) {
+      return res.status(409).json({
+        message: `Move the ${assignedTpos} TPO account(s) in ${name} to another department before removing it.`
+      });
+    }
+
+    college.departments = college.departments.filter((department) => department !== name);
+    await college.save();
+
+    return res.json({
+      message: `Department ${name} removed.`,
+      departments: college.departments
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Unable to remove department."
+    });
+  }
+});
+
+// TPOs must belong to a department on the college's list so student
+// approval requests can be routed to them.
+const resolveTpoDepartment = async (req, res, value) => {
+  const college = await College.findById(getCollegeId(req)).lean();
+  const department = findDepartment(college, value);
+
+  if (!department) {
+    res.status(400).json({
+      message: college?.departments?.length
+        ? "Please choose a department from your college's department list."
+        : "Add your college's departments first, then assign one to this TPO."
+    });
+    return null;
+  }
+
+  return department;
+};
 
 router.get("/tpos", async (req, res) => {
   try {
@@ -70,6 +177,9 @@ router.post("/tpos", async (req, res) => {
       });
     }
 
+    const tpoDepartment = await resolveTpoDepartment(req, res, department);
+    if (!tpoDepartment) return;
+
     const normalizedEmail = email.trim().toLowerCase();
 
     if (await User.findOne({ email: normalizedEmail })) {
@@ -86,7 +196,7 @@ router.post("/tpos", async (req, res) => {
       passwordHash: await bcrypt.hash(password, 12),
       role: "tpo",
       collegeId,
-      department,
+      department: tpoDepartment,
       phone,
       college: collegeName,
       isVerified: true,
@@ -141,6 +251,9 @@ router.patch("/tpos/:id", async (req, res) => {
       });
     }
 
+    const tpoDepartment = await resolveTpoDepartment(req, res, department);
+    if (!tpoDepartment) return;
+
     const normalizedEmail = email.trim().toLowerCase();
 
     const duplicate = await User.findOne({
@@ -164,7 +277,7 @@ router.patch("/tpos/:id", async (req, res) => {
         $set: {
           name: name.trim(),
           email: normalizedEmail,
-          department,
+          department: tpoDepartment,
           phone
         }
       },

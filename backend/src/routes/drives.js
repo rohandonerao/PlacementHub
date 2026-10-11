@@ -2,6 +2,8 @@ import express from "express";
 import mongoose from "mongoose";
 import PlacementDrive from "../models/PlacementDrive.js";
 import Application from "../models/Application.js";
+import College from "../models/College.js";
+import { findDepartment, normalizeDepartment } from "../utils/departments.js";
 import {
   authenticate,
   authorize,
@@ -66,6 +68,24 @@ router.post(
         });
       }
 
+      // Eligible departments must use the college's own spelling, otherwise a
+      // typo would silently make every student of that department ineligible.
+      const college = await College.findById(collegeId).select("departments").lean();
+      const requestedDepartments = Array.isArray(eligibleDepartments) ? eligibleDepartments : [];
+      let driveDepartments = requestedDepartments.map(normalizeDepartment).filter(Boolean);
+
+      if (college?.departments?.length) {
+        const unknown = driveDepartments.filter((name) => !findDepartment(college, name));
+
+        if (unknown.length > 0) {
+          return res.status(400).json({
+            message: `These departments are not on your college's list: ${unknown.join(", ")}.`
+          });
+        }
+
+        driveDepartments = [...new Set(driveDepartments.map((name) => findDepartment(college, name)))];
+      }
+
       const drive = await PlacementDrive.create({
         companyName,
         jobTitle,
@@ -73,7 +93,7 @@ router.post(
         packageLPA,
         minimumCgpa,
         maximumBacklogs,
-        eligibleDepartments,
+        eligibleDepartments: driveDepartments,
         eligibleGraduationYears,
         requiredSkills,
         applicationDeadline: deadline,

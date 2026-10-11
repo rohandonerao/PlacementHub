@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import User from "../models/User.js";
 import { authenticate, authorize } from "../middleware/auth.js";
+import { departmentQuery } from "../utils/departments.js";
 
 const router = express.Router();
 
@@ -21,9 +22,25 @@ const getCollegeFilter = (req, res) => {
   };
 };
 
+// Department TPOs only handle students of their own department;
+// the college admin (main TPO) handles every department.
+const getApprovalFilter = (req, res) => {
+  const filter = getCollegeFilter(req, res);
+  if (!filter || req.user.role !== "tpo") return filter;
+
+  if (!req.user.department?.trim()) {
+    res.status(403).json({
+      message: "Your TPO account has no department assigned. Ask your college admin to set one."
+    });
+    return null;
+  }
+
+  return { ...filter, department: departmentQuery(req.user.department) };
+};
+
 router.get("/pending", async (req, res) => {
   try {
-    const filter = getCollegeFilter(req, res);
+    const filter = getApprovalFilter(req, res);
     if (!filter) return;
 
     const students = await User.find({
@@ -69,7 +86,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.patch("/:studentId/approve", authorize("tpo"), async (req, res) => {
+router.patch("/:studentId/approve", async (req, res) => {
   try {
     const { studentId } = req.params;
 
@@ -79,7 +96,7 @@ router.patch("/:studentId/approve", authorize("tpo"), async (req, res) => {
       });
     }
 
-    const filter = getCollegeFilter(req, res);
+    const filter = getApprovalFilter(req, res);
     if (!filter) return;
 
     const student = await User.findOne({
@@ -123,7 +140,7 @@ router.patch("/:studentId/approve", authorize("tpo"), async (req, res) => {
   }
 });
 
-router.patch("/:studentId/reject", authorize("tpo"), async (req, res) => {
+router.patch("/:studentId/reject", async (req, res) => {
   try {
     const { studentId } = req.params;
 
@@ -133,7 +150,7 @@ router.patch("/:studentId/reject", authorize("tpo"), async (req, res) => {
       });
     }
 
-    const filter = getCollegeFilter(req, res);
+    const filter = getApprovalFilter(req, res);
     if (!filter) return;
 
     const student = await User.findOne({

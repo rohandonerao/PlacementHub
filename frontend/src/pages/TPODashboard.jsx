@@ -1,29 +1,54 @@
 import { useCallback, useEffect, useState } from "react";
-import { getPendingStudents, approveStudent, rejectStudent, getPlacementDrives, createPlacementDrive, getDriveApplications, updateApplicationStatus, deletePlacementDrive } from "../api.js";
+import { getPendingStudents, approveStudent, rejectStudent, getPlacementDrives, createPlacementDrive, getDriveApplications, updateApplicationStatus, deletePlacementDrive, getStudentProfile } from "../api.js";
 import {
-  LayoutDashboard,
-  Users,
-  BriefcaseBusiness,
-  FileText,
   BarChart3,
-  LogOut,
-  Menu,
-  X,
-  Bell,
-  Search,
-  ArrowUpRight,
-  Clock,
+  Building2,
+  BriefcaseBusiness,
+  CalendarDays,
+  Check,
   CheckCircle2,
-  GraduationCap,
+  ChevronRight,
+  ClipboardList,
+  LayoutDashboard,
   Plus,
   RefreshCw,
+  Search,
+  Star,
   Trash2,
-  Download
+  Trophy,
+  UserCheck,
+  X
 } from "lucide-react";
+import {
+  Alert,
+  AppShell,
+  Avatar,
+  Bar,
+  Empty,
+  Field,
+  OrgMark,
+  PageHeader,
+  SkeletonRows,
+  StatusBadge,
+  Summary,
+  daysUntil,
+  deadlineLabel,
+  driveStatus,
+  formatDate,
+  isExpired
+} from "../components/ui";
 
 export default function TPODashboard({ user, logout }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collegeDepartments, setCollegeDepartments] = useState([]);
+
+  // The college's department list, used for drive eligibility.
+  useEffect(() => {
+    getStudentProfile(sessionStorage.getItem("token"))
+      .then((result) => setCollegeDepartments(result.collegeDepartments || []))
+      .catch(() => setCollegeDepartments([]));
+  }, []);
   const [students, setStudents] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentsError, setStudentsError] = useState("");
@@ -57,7 +82,7 @@ export default function TPODashboard({ user, logout }) {
   });
 
   const loadPendingStudents = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
 
     if (!token) {
       setStudentsError("Your session has expired. Please log in again.");
@@ -87,7 +112,7 @@ setStudents(studentList);
   }, []);
 
   const loadPlacementDrives = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) {
       setDrivesError("Your session has expired. Please log in again.");
       return;
@@ -110,7 +135,7 @@ setStudents(studentList);
     const message = `Delete ${drive.companyName || "this company"} — ${drive.jobTitle || "placement drive"}? This action may also remove related applications and cannot be undone.`;
     if (!window.confirm(message)) return;
 
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) {
       setDrivesError("Your session has expired. Please log in again.");
       return;
@@ -135,7 +160,7 @@ setStudents(studentList);
   };
 
   const loadReports = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) {
       setReportsError("Your session has expired. Please log in again.");
       return;
@@ -179,7 +204,7 @@ setStudents(studentList);
   }, [activeTab]);
 
   const loadDriveApplications = useCallback(async (driveId, availableDrives = []) => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) {
       setApplicationsError("Your session has expired. Please log in again.");
       setApplications([]);
@@ -209,7 +234,7 @@ setStudents(studentList);
     setApplicationsError("");
     let availableDrives = drives;
     if (!availableDrives.length) {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("token");
       if (!token) {
         setApplicationsError("Your session has expired. Please log in again.");
         return;
@@ -241,7 +266,7 @@ setStudents(studentList);
   }, [activeTab]);
 
   const handleApplicationStatus = async (applicationId, status) => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) {
       setApplicationsError("Your session has expired. Please log in again.");
       return;
@@ -276,7 +301,7 @@ setStudents(studentList);
 
   const handleCreateDrive = async (event) => {
     event.preventDefault();
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     if (!token) {
       setDrivesError("Your session has expired. Please log in again.");
       return;
@@ -318,7 +343,7 @@ setStudents(studentList);
   }, [activeTab, loadPendingStudents]);
 
   const handleStudentAction = async (studentId, action) => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
 
     if (!token) {
       setStudentsError("Your session has expired. Please log in again.");
@@ -326,7 +351,7 @@ setStudents(studentList);
     }
 
     const student = students.find((item) => item._id === studentId);
-    const actionLabel = action === "approve" ? "approve" : "reject and delete";
+    const actionLabel = action === "approve" ? "approve" : "reject";
 
     if (!window.confirm(`Are you sure you want to ${actionLabel} ${student?.name || "this student"}?`)) {
       return;
@@ -350,17 +375,47 @@ setStudents(studentList);
     }
   };
 
+  // Overview needs drive and approval counts.
+  useEffect(() => {
+    if (activeTab === "overview") {
+      loadPlacementDrives();
+      loadPendingStudents();
+    }
+  }, [activeTab, loadPlacementDrives, loadPendingStudents]);
+
+  const [companySearch, setCompanySearch] = useState("");
+
+  const openDrives = drives.filter((drive) => drive.status !== "closed" && !isExpired(drive));
+
   const menuItems = [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
-    { id: "students", label: "Student Approvals", icon: Users },
-    { id: "drives", label: "Placement Drives", icon: BriefcaseBusiness },
-    { id: "applications", label: "Applications", icon: FileText },
-    { id: "reports", label: "Reports & Analytics", icon: BarChart3 }
+    { id: "students", label: "Student approvals", icon: UserCheck, count: students.length },
+    { id: "drives", label: "Placement drives", icon: BriefcaseBusiness },
+    { id: "companies", label: "Companies", icon: Building2 },
+    { id: "applications", label: "Applicants & interviews", icon: ClipboardList },
+    { id: "reports", label: "Reports", icon: BarChart3 }
   ];
 
-  const activeItem = menuItems.find((item) => item.id === activeTab);
-  const ActiveIcon = activeItem?.icon || LayoutDashboard;
+  const companies = Object.values(
+    drives.reduce((acc, drive) => {
+      const key = (drive.companyName || "Company").trim();
+      const entry = acc[key.toLowerCase()] || (acc[key.toLowerCase()] = { name: key, drives: [], roles: new Set(), skills: new Set(), maxPackage: null });
+      entry.drives.push(drive);
+      if (drive.jobTitle) entry.roles.add(drive.jobTitle);
+      (drive.requiredSkills || []).forEach((skill) => entry.skills.add(skill));
+      if (drive.packageLPA != null) entry.maxPackage = Math.max(entry.maxPackage ?? 0, drive.packageLPA);
+      return acc;
+    }, {})
+  )
+    .sort((a, b) => b.drives.length - a.drives.length)
+    .filter((company) => !companySearch.trim() || company.name.toLowerCase().includes(companySearch.trim().toLowerCase()));
 
+  const reportTotals = {
+    applications: reports.reduce((sum, item) => sum + item.applications.length, 0),
+    status: (status) => reports.reduce((sum, item) => sum + item.applications.filter((app) => String(app.status || "applied").toLowerCase() === status).length, 0)
+  };
+
+  const resetDriveForm = () => setShowDriveForm(false);
   const filteredStudents = students.filter((student) => {
     const query = studentSearch.trim().toLowerCase();
     return !query || [student.name, student.email, student.department, student.college]
@@ -386,691 +441,486 @@ setStudents(studentList);
     return matchesQuery && (applicationStatusFilter === "all" || status === applicationStatusFilter);
   });
 
+  const firstName = user?.name?.split(" ")[0] || "Officer";
+  const upcoming = [...openDrives].sort((a, b) => new Date(a.applicationDeadline) - new Date(b.applicationDeadline)).slice(0, 5);
+  const statusCount = (status) => applications.filter((app) => String(app.status || "applied").toLowerCase() === status).length;
+  const openCreate = () => { setActiveTab("drives"); setShowDriveForm(true); };
+
   return (
-    <div className="tpo-layout">
-      {sidebarOpen && (
-        <button
-          className="tpo-overlay"
-          onClick={() => setSidebarOpen(false)}
-          aria-label="Close sidebar"
-        />
-      )}
+    <AppShell nav={menuItems} active={activeTab} onNavigate={setActiveTab} user={user} roleLabel="Placement officer" section="TPO portal" onLogout={logout}>
+      {activeTab === "overview" && (
+        <>
+          <PageHeader
+            title="Overview"
+            description={`Welcome back, ${firstName}. Drives, approvals and deadlines for your placement cell.`}
+            actions={
+              <>
+                <button className="btn btn-secondary" onClick={() => setActiveTab("students")}>Review approvals</button>
+                <button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> New drive</button>
+              </>
+            }
+          />
 
-      <aside className={`tpo-sidebar ${sidebarOpen ? "tpo-sidebar-open" : ""}`}>
-        <div className="tpo-brand">
-          <div className="tpo-brand-icon">
-            <GraduationCap size={24} />
-          </div>
+          <Summary
+            loading={drivesLoading && !drives.length}
+            items={[
+              ["Total drives", drives.length, "All recruitment drives"],
+              ["Open drives", openDrives.length, "Accepting applications"],
+              ["Pending approvals", students.length, "Student registrations"],
+              ["Companies", companies.length, "Recruiting this season"]
+            ]}
+          />
 
-          <div className="tpo-brand-text">
-            <strong>PlacementHub</strong>
-            <span>Management Portal</span>
-          </div>
-
-          <button
-            className="tpo-close-mobile"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close navigation"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="tpo-sidebar-label">WORKSPACE</div>
-
-        <nav className="tpo-menu">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <button
-                key={item.id}
-                className={`tpo-menu-item ${
-                  activeTab === item.id ? "tpo-menu-active" : ""
-                }`}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setSidebarOpen(false);
-                }}
-              >
-                <Icon size={19} />
-                <span>{item.label}</span>
-
-                {activeTab === item.id && (
-                  <span className="tpo-active-indicator" />
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="tpo-sidebar-help">
-          <div className="tpo-help-icon">
-            <GraduationCap size={22} />
-          </div>
-
-          <strong>Placement Season</strong>
-
-          <p>Manage recruitment activities from one workspace.</p>
-        </div>
-
-        <div className="tpo-sidebar-user">
-          <div className="tpo-avatar">
-            {(user?.name || "T").charAt(0).toUpperCase()}
-          </div>
-
-          <div className="tpo-user-details">
-            <strong>{user?.name || "Placement Officer"}</strong>
-            <span>Training & Placement</span>
-          </div>
-
-          <button
-            className="tpo-logout-button"
-            onClick={logout}
-            title="Logout"
-            aria-label="Logout"
-          >
-            <LogOut size={18} />
-          </button>
-        </div>
-      </aside>
-
-      <main className="tpo-main">
-        <header className="tpo-topbar">
-          <div className="tpo-topbar-left">
-            <button
-              className="tpo-mobile-menu"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Open navigation"
-            >
-              <Menu size={22} />
-            </button>
-
-            <div>
-              <div className="tpo-breadcrumb">
-                Workspace <span>/</span> {activeItem?.label}
+          <section className="grid grid-main-side">
+            <div className="panel">
+              <div className="panel-head">
+                <div><h2>Upcoming deadlines</h2><p>Open drives, closing soonest first.</p></div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab("drives")}>All drives</button>
               </div>
-
-              <h1>{activeItem?.label}</h1>
-            </div>
-          </div>
-
-          <div className="tpo-topbar-right">
-            <div className="tpo-system-status">
-              <span />
-              Portal Active
-            </div>
-
-            <button
-              className="tpo-notification"
-              title="Notifications"
-              aria-label="Notifications"
-            >
-              <Bell size={20} />
-            </button>
-
-            <div className="tpo-topbar-profile">
-              <div className="tpo-avatar tpo-avatar-small">
-                {(user?.name || "T").charAt(0).toUpperCase()}
-              </div>
-
-              <div>
-                <strong>{user?.name || "Placement Officer"}</strong>
-                <span>Administrator</span>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {activeTab === "overview" ? (
-          <div className="tpo-content">
-            <section className="tpo-welcome">
-              <div className="tpo-welcome-content">
-                <span className="tpo-welcome-tag">
-                  TRAINING & PLACEMENT OFFICE
-                </span>
-
-                <h2>
-                  Welcome back, {user?.name?.split(" ")[0] || "Officer"}!
-                </h2>
-
-                <p>
-                  Your central workspace for student placement activities,
-                  recruitment drives, and application management.
-                </p>
-
-                <button
-                  className="tpo-welcome-button"
-                  onClick={() => setActiveTab("drives")}
-                >
-                  Manage Placement Drives
-                  <ArrowUpRight size={18} />
-                </button>
-              </div>
-
-              <div className="tpo-welcome-visual">
-                <div className="tpo-visual-circle tpo-circle-one" />
-                <div className="tpo-visual-circle tpo-circle-two" />
-
-                <div className="tpo-visual-card">
-                  <div className="tpo-visual-card-icon">
-                    <GraduationCap size={30} />
-                  </div>
-
-                  <strong>PlacementHub</strong>
-                  <span>Placement Management System</span>
-
-                  <div className="tpo-visual-progress">
-                    <span />
-                  </div>
-
-                  <small>One workspace. Every placement.</small>
-                </div>
-              </div>
-            </section>
-
-            <div className="tpo-section-title">
-              <div>
-                <h2>Dashboard Overview</h2>
-                <p>Monitor your placement activities at a glance.</p>
-              </div>
-
-              <span className="tpo-live-badge">
-                <span />
-                Live workspace
-              </span>
-            </div>
-
-            <section className="tpo-stat-grid">
-              <article className="tpo-stat-card">
-                <div className="tpo-stat-top">
-                  <div className="tpo-stat-icon tpo-icon-blue">
-                    <BriefcaseBusiness size={22} />
-                  </div>
-                  <ArrowUpRight size={18} className="tpo-stat-arrow" />
-                </div>
-
-                <span className="tpo-stat-label">Total Placement Drives</span>
-                <strong className="tpo-stat-value">{drives.length || "—"}</strong>
-                <span className="tpo-stat-caption">
-                  Recruitment opportunities
-                </span>
-              </article>
-
-              <article className="tpo-stat-card">
-                <div className="tpo-stat-top">
-                  <div className="tpo-stat-icon tpo-icon-orange">
-                    <Users size={22} />
-                  </div>
-                  <ArrowUpRight size={18} className="tpo-stat-arrow" />
-                </div>
-
-                <span className="tpo-stat-label">Pending Approvals</span>
-                <strong className="tpo-stat-value">{students.length || "—"}</strong>
-                <span className="tpo-stat-caption">
-                  Student registrations
-                </span>
-              </article>
-
-              <article className="tpo-stat-card">
-                <div className="tpo-stat-top">
-                  <div className="tpo-stat-icon tpo-icon-purple">
-                    <FileText size={22} />
-                  </div>
-                  <ArrowUpRight size={18} className="tpo-stat-arrow" />
-                </div>
-
-                <span className="tpo-stat-label">Total Applications</span>
-                <strong className="tpo-stat-value">—</strong>
-                <span className="tpo-stat-caption">
-                  Submitted applications
-                </span>
-              </article>
-
-              <article className="tpo-stat-card">
-                <div className="tpo-stat-top">
-                  <div className="tpo-stat-icon tpo-icon-green">
-                    <CheckCircle2 size={22} />
-                  </div>
-                  <ArrowUpRight size={18} className="tpo-stat-arrow" />
-                </div>
-
-                <span className="tpo-stat-label">Selected Students</span>
-                <strong className="tpo-stat-value">—</strong>
-                <span className="tpo-stat-caption">
-                  Successful selections
-                </span>
-              </article>
-            </section>
-
-            <section className="tpo-bottom-grid">
-              <div className="tpo-panel tpo-quick-panel">
-                <div className="tpo-panel-heading">
-                  <div>
-                    <h2>Quick Actions</h2>
-                    <p>Access your most-used modules.</p>
-                  </div>
-                </div>
-
-                <div className="tpo-quick-list">
-                  {menuItems.slice(1).map((item) => {
-                    const Icon = item.icon;
-
+              {drivesLoading && !drives.length ? <SkeletonRows rows={3} /> : upcoming.length === 0 ? (
+                <Empty icon={CalendarDays} title="No open drives" text="Create a placement drive to start receiving applications." action={<button className="btn btn-primary btn-sm" onClick={openCreate}><Plus size={15} /> New drive</button>} />
+              ) : (
+                <div className="rows">
+                  {upcoming.map((drive) => {
+                    const days = daysUntil(drive.applicationDeadline);
                     return (
-                      <button
-                        key={item.id}
-                        className="tpo-quick-item"
-                        onClick={() => setActiveTab(item.id)}
-                      >
-                        <div className="tpo-quick-item-icon">
-                          <Icon size={20} />
+                      <button className="row row-link" key={drive._id} onClick={() => { setSelectedDriveId(drive._id); setActiveTab("applications"); }}>
+                        <OrgMark name={drive.companyName} />
+                        <div className="row-main">
+                          <strong>{drive.jobTitle}</strong>
+                          <span>{drive.companyName} · Min. CGPA {drive.minimumCgpa}{drive.packageLPA != null ? ` · ${drive.packageLPA} LPA` : ""}</span>
                         </div>
-
-                        <div className="tpo-quick-item-text">
-                          <strong>{item.label}</strong>
-                          <span>Open and manage this module</span>
-                        </div>
-
-                        <ArrowUpRight
-                          size={18}
-                          className="tpo-quick-arrow"
-                        />
+                        <span className={`row-meta ${days <= 3 ? "urgent" : ""}`}>{deadlineLabel(drive.applicationDeadline)}</span>
+                        <ChevronRight size={16} />
                       </button>
                     );
                   })}
                 </div>
+              )}
+            </div>
+
+            <div className="panel">
+              <div className="panel-head">
+                <div><h2>Awaiting approval</h2><p>New student registrations.</p></div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab("students")}>Review all</button>
               </div>
-
-              <div className="tpo-panel tpo-overview-panel">
-                <div className="tpo-panel-heading">
-                  <div>
-                    <h2>Workspace Information</h2>
-                    <p>Your account and portal details.</p>
-                  </div>
-                </div>
-
-                <div className="tpo-information-list">
-                  <div className="tpo-information-row">
-                    <div className="tpo-information-icon">
-                      <Users size={19} />
-                    </div>
-
-                    <div>
-                      <span>Account</span>
-                      <strong>{user?.name || "Placement Officer"}</strong>
-                    </div>
-                  </div>
-
-                  <div className="tpo-information-row">
-                    <div className="tpo-information-icon">
-                      <FileText size={19} />
-                    </div>
-
-                    <div>
-                      <span>Registered email</span>
-                      <strong>{user?.email || "Not available"}</strong>
-                    </div>
-                  </div>
-
-                  <div className="tpo-information-row">
-                    <div className="tpo-information-icon">
-                      <Clock size={19} />
-                    </div>
-
-                    <div>
-                      <span>Portal status</span>
-                      <strong className="tpo-status-text">
-                        <span />
-                        Active
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="tpo-information-footer">
-                  <GraduationCap size={20} />
-                  <span>AI-Driven Placement Management System</span>
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : activeTab === "students" ? (
-          <div className="tpo-content">
-            <section className="tpo-module-header">
-              <div className="tpo-module-icon">
-                <Users size={28} />
-              </div>
-              <div>
-                <span className="tpo-welcome-tag">STUDENT MANAGEMENT</span>
-                <h2>Pending Student Approvals</h2>
-                <p>Review student registrations and approve eligible accounts.</p>
-              </div>
-              <button
-                type="button"
-                className="tpo-module-back"
-                onClick={loadPendingStudents}
-                disabled={studentsLoading}
-              >
-                {studentsLoading ? "Refreshing..." : "Refresh list"}
-              </button>
-            </section>
-
-            {studentsError && (
-              <div className="tpo-alert tpo-alert-error" role="alert">{studentsError}</div>
-            )}
-            {studentsMessage && (
-              <div className="tpo-alert tpo-alert-success" role="status">{studentsMessage}</div>
-            )}
-
-            <section className="tpo-panel tpo-students-panel">
-              <div className="tpo-panel-heading">
-                <div>
-                  <h2>Pending Registrations</h2>
-                  <p>{students.length} student{students.length === 1 ? "" : "s"} awaiting review</p>
-                </div>
-                <label className="tpo-search">
-                  <Search size={17} />
-                  <input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Search students" aria-label="Search students" />
-                </label>
-              </div>
-
-              {studentsLoading ? (
-                <div className="tpo-empty-state">Loading pending students...</div>
-              ) : filteredStudents.length === 0 ? (
-                <div className="tpo-empty-state">
-                  <CheckCircle2 size={34} />
-                  <h3>{students.length ? "No matching students" : "No pending approvals"}</h3>
-                  <p>{students.length ? "Try another name, email, department, or college." : "All student registrations have been reviewed."}</p>
-                </div>
+              {studentsLoading && !students.length ? <SkeletonRows rows={3} /> : students.length === 0 ? (
+                <Empty icon={CheckCircle2} title="All caught up" text="There are no registrations waiting for review." />
               ) : (
-                <div className="tpo-student-list">
-                  {filteredStudents.map((student) => (
-                    <article className="tpo-student-card" key={student._id}>
-                      <div className="tpo-student-heading">
-                        <div className="tpo-avatar">{(student.name || "S").charAt(0).toUpperCase()}</div>
-                        <div className="tpo-student-identity">
-                          <h3>{student.name || "Name not provided"}</h3>
-                          <p>{student.email || "Email not provided"}</p>
-                        </div>
-                        <span className="tpo-pending-badge">Pending</span>
+                <div className="rows">
+                  {students.slice(0, 5).map((student) => (
+                    <div className="row" key={student._id}>
+                      <Avatar name={student.name} />
+                      <div className="row-main">
+                        <strong>{student.name}</strong>
+                        <span>{[student.department, student.cgpa != null ? `CGPA ${student.cgpa}` : null].filter(Boolean).join(" · ") || student.email}</span>
                       </div>
-
-                      <div className="tpo-student-details">
-                        <div><span>Department</span><strong>{student.department || "Not provided"}</strong></div>
-                        <div><span>CGPA</span><strong>{student.cgpa ?? "Not provided"}</strong></div>
-                        <div><span>Graduation year</span><strong>{student.graduationYear ?? "Not provided"}</strong></div>
-                        <div><span>Backlogs</span><strong>{student.backlogs ?? "Not provided"}</strong></div>
-                        <div><span>College</span><strong>{student.college || "Not provided"}</strong></div>
-                        <div><span>Phone</span><strong>{student.phone || "Not provided"}</strong></div>
-                      </div>
-
-                      <div className="tpo-student-actions">
-                        <button
-                          type="button"
-                          className="tpo-approve-button"
-                          onClick={() => handleStudentAction(student._id, "approve")}
-                          disabled={Boolean(processingStudentId)}
-                        >
-                          {processingStudentId === student._id ? "Processing..." : "Approve student"}
-                        </button>
-                        <button
-                          type="button"
-                          className="tpo-reject-button"
-                          onClick={() => handleStudentAction(student._id, "reject")}
-                          disabled={Boolean(processingStudentId)}
-                        >
-                          Reject registration
-                        </button>
-                      </div>
-                    </article>
+                      <button className="btn btn-secondary btn-sm" disabled={Boolean(processingStudentId)} onClick={() => handleStudentAction(student._id, "approve")} aria-label={`Approve ${student.name}`}>
+                        <Check size={14} /> Approve
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
-            </section>
-          </div>
-        ) : activeTab === "drives" ? (
-          <div className="tpo-content">
-            <section className="tpo-module-header">
-              <div className="tpo-module-icon"><BriefcaseBusiness size={28} /></div>
-              <div>
-                <span className="tpo-welcome-tag">RECRUITMENT MANAGEMENT</span>
-                <h2>Placement Drives</h2>
-                <p>Create recruitment opportunities and manage the drives available to students.</p>
-              </div>
-              <div className="tpo-drive-header-actions">
-                <button type="button" className="tpo-module-back" onClick={loadPlacementDrives} disabled={drivesLoading}>
-                  <RefreshCw size={16} /> {drivesLoading ? "Refreshing..." : "Refresh"}
-                </button>
-                <button type="button" className="tpo-drive-primary" onClick={() => setShowDriveForm((current) => !current)}>
-                  <Plus size={17} /> {showDriveForm ? "Cancel" : "Create Drive"}
-                </button>
-              </div>
-            </section>
+            </div>
+          </section>
+        </>
+      )}
 
-            {drivesError && <div className="tpo-alert tpo-alert-error" role="alert">{drivesError}</div>}
-            {drivesMessage && <div className="tpo-alert tpo-alert-success" role="status">{drivesMessage}</div>}
-
-            {showDriveForm && (
-              <section className="tpo-panel tpo-drive-form-panel">
-                <div className="tpo-panel-heading"><div><h2>Create Placement Drive</h2><p>Fields marked * are required. Separate multiple values with commas.</p></div></div>
-                <form className="tpo-drive-form" onSubmit={handleCreateDrive}>
-                  <label>Company name *<input name="companyName" value={driveForm.companyName} onChange={handleDriveInput} required maxLength={120} /></label>
-                  <label>Job title *<input name="jobTitle" value={driveForm.jobTitle} onChange={handleDriveInput} required maxLength={120} /></label>
-                  <label className="tpo-drive-full">Job description *<textarea name="description" value={driveForm.description} onChange={handleDriveInput} required rows={3} /></label>
-                  <label>Package (LPA)<input name="packageLPA" type="number" min="0" step="0.1" value={driveForm.packageLPA} onChange={handleDriveInput} placeholder="e.g. 6.5" /></label>
-                  <label>Minimum CGPA *<input name="minimumCgpa" type="number" min="0" max="10" step="0.01" value={driveForm.minimumCgpa} onChange={handleDriveInput} required /></label>
-                  <label>Maximum backlogs *<input name="maximumBacklogs" type="number" min="0" step="1" value={driveForm.maximumBacklogs} onChange={handleDriveInput} required /></label>
-                  <label>Eligible departments<input name="eligibleDepartments" value={driveForm.eligibleDepartments} onChange={handleDriveInput} placeholder="Computer Engineering, IT" /></label>
-                  <label>Graduation years<input name="eligibleGraduationYears" value={driveForm.eligibleGraduationYears} onChange={handleDriveInput} placeholder="2027, 2028" /></label>
-                  <label>Required skills<input name="requiredSkills" value={driveForm.requiredSkills} onChange={handleDriveInput} placeholder="Java, SQL, React" /></label>
-                  <label>Application deadline *<input name="applicationDeadline" type="datetime-local" value={driveForm.applicationDeadline} onChange={handleDriveInput} required /></label>
-                  <div className="tpo-drive-full tpo-drive-form-actions">
-                    <button type="button" className="tpo-module-back" onClick={() => setShowDriveForm(false)}>Cancel</button>
-                    <button type="submit" className="tpo-drive-primary" disabled={creatingDrive}>{creatingDrive ? "Creating..." : "Create Placement Drive"}</button>
-                  </div>
-                </form>
-              </section>
+      {activeTab === "students" && (
+        <>
+          <PageHeader
+            title="Student approvals"
+            description={`Students from the ${user?.department || "your"} department who are waiting for approval. Approved students can view drives and apply; rejected students cannot.`}
+            actions={<button className="btn btn-secondary" onClick={loadPendingStudents} disabled={studentsLoading}><RefreshCw size={15} /> Refresh</button>}
+          />
+          <Alert tone="error">{studentsError}</Alert>
+          <Alert tone="success">{studentsMessage}</Alert>
+          <div className="panel">
+            <div className="panel-head">
+              <div><h2>Pending registrations</h2><p>{students.length} waiting for review</p></div>
+              <label className="input-icon" style={{ flex: "0 1 320px", minWidth: 0, width: "100%" }}>
+                <Search size={15} />
+                <input className="input" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search name, email, department" aria-label="Search students" />
+              </label>
+            </div>
+            {studentsLoading ? <SkeletonRows rows={4} /> : filteredStudents.length === 0 ? (
+              <Empty icon={CheckCircle2} title={students.length ? "No matching students" : "No pending approvals"} text={students.length ? "Try another name, email, department or college." : "All student registrations have been reviewed."} />
+            ) : (
+              <div className="table-wrap">
+                <table className="table table-cards">
+                  <thead>
+                    <tr><th>Student</th><th>Department</th><th>CGPA</th><th>Batch</th><th>Backlogs</th><th>Phone</th><th className="right">Decision</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredStudents.map((student) => (
+                      <tr key={student._id}>
+                        <td className="td-main">
+                          <div className="cell-main">
+                            <Avatar name={student.name} size="sm" />
+                            <div style={{ minWidth: 0 }}><strong>{student.name || "Name not provided"}</strong><span>{student.email}</span></div>
+                          </div>
+                        </td>
+                        <td data-label="Department">{student.department || "—"}</td>
+                        <td data-label="CGPA">{student.cgpa ?? "—"}</td>
+                        <td data-label="Batch">{student.graduationYear ?? "—"}</td>
+                        <td data-label="Backlogs">{student.backlogs ?? "—"}</td>
+                        <td data-label="Phone">{student.phone || "—"}</td>
+                        <td data-label="Decision">
+                          <div className="row-actions">
+                            <button className="btn btn-danger btn-sm" onClick={() => handleStudentAction(student._id, "reject")} disabled={Boolean(processingStudentId)}>Reject</button>
+                            <button className="btn btn-success btn-sm" onClick={() => handleStudentAction(student._id, "approve")} disabled={Boolean(processingStudentId)}>
+                              {processingStudentId === student._id ? "Saving…" : "Approve"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-
-            <section className="tpo-panel tpo-drive-list-panel">
-              <div className="tpo-panel-heading">
-                <div><h2>All Placement Drives</h2><p>{drives.length} drive{drives.length === 1 ? "" : "s"} found</p></div>
-                <label className="tpo-search">
-                  <Search size={17} />
-                  <input value={driveSearch} onChange={(event) => setDriveSearch(event.target.value)} placeholder="Search drives" aria-label="Search placement drives" />
-                </label>
-              </div>
-              {drivesLoading ? <div className="tpo-empty-state">Loading placement drives...</div> : filteredDrives.length === 0 ? (
-                <div className="tpo-empty-state"><BriefcaseBusiness size={34} /><h3>{drives.length ? "No matching drives" : "No placement drives yet"}</h3><p>{drives.length ? "Try searching by company or job title." : "Create your first drive to make it available to students."}</p></div>
-              ) : (
-                <div className="tpo-drive-list">
-                  {filteredDrives.map((drive) => (
-                    <article className="tpo-drive-card" key={drive._id}>
-                      <div className="tpo-drive-card-top"><div><h3>{drive.companyName}</h3><p>{drive.jobTitle}</p></div><span className={`tpo-drive-status ${drive.status === "closed" || (drive.applicationDeadline && new Date(drive.applicationDeadline).getTime() < Date.now()) ? "tpo-drive-status-closed" : ""}`}>{drive.applicationDeadline && new Date(drive.applicationDeadline).getTime() < Date.now() ? "Expired" : (drive.status || "open")}</span></div>
-                      <p className="tpo-drive-description">{drive.description}</p>
-                      <div className="tpo-drive-details">
-                        <div><span>Package</span><strong>{drive.packageLPA == null ? "Not specified" : `${drive.packageLPA} LPA`}</strong></div>
-                        <div><span>Minimum CGPA</span><strong>{drive.minimumCgpa}</strong></div>
-                        <div><span>Maximum backlogs</span><strong>{drive.maximumBacklogs}</strong></div>
-                        <div><span>Deadline</span><strong>{drive.applicationDeadline ? new Date(drive.applicationDeadline).toLocaleString() : "Not specified"}</strong></div>
-                        <div><span>Departments</span><strong>{drive.eligibleDepartments?.length ? drive.eligibleDepartments.join(", ") : "All departments"}</strong></div>
-                        <div><span>Graduation years</span><strong>{drive.eligibleGraduationYears?.length ? drive.eligibleGraduationYears.join(", ") : "All years"}</strong></div>
-                        <div className="tpo-drive-full"><span>Required skills</span><strong>{drive.requiredSkills?.length ? drive.requiredSkills.join(", ") : "Not specified"}</strong></div>
-                      </div>
-                      <div className="tpo-student-actions">
-                        <button type="button" className="tpo-reject-button" onClick={() => handleDeleteDrive(drive)} disabled={Boolean(deletingDriveId)}>
-                          <Trash2 size={16} /> {deletingDriveId === drive._id ? "Deleting..." : "Delete Drive"}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
           </div>
-        ) : activeTab === "applications" ? (
-          <div className="tpo-content">
-            <section className="tpo-module-header">
-              <div className="tpo-module-icon"><FileText size={28} /></div>
-              <div>
-                <span className="tpo-welcome-tag">RECRUITMENT MANAGEMENT</span>
-                <h2>Application Management</h2>
-                <p>Review applicants and update their recruitment status for each placement drive.</p>
-              </div>
-              <button type="button" className="tpo-module-back" onClick={loadApplicationsWorkspace} disabled={applicationsLoading}>
-                <RefreshCw size={16} /> {applicationsLoading ? "Refreshing..." : "Refresh"}
-              </button>
-            </section>
+        </>
+      )}
 
-            {applicationsError && <div className="tpo-alert tpo-alert-error" role="alert">{applicationsError}</div>}
-            {applicationsMessage && <div className="tpo-alert tpo-alert-success" role="status">{applicationsMessage}</div>}
-
-            <section className="tpo-panel tpo-drive-list-panel">
-              <div className="tpo-panel-heading">
-                <div><h2>Select Placement Drive</h2><p>Choose a drive to see its submitted applications.</p></div>
-                <select
-                  className="tpo-application-drive-select"
-                  value={selectedDriveId}
-                  onChange={(event) => {
-                    const driveId = event.target.value;
-                    setSelectedDriveId(driveId);
-                    loadDriveApplications(driveId, drives);
-                  }}
-                  aria-label="Select placement drive"
-                >
-                  <option value="">Select a drive</option>
-                  {drives.map((drive) => <option key={drive._id} value={drive._id}>{drive.companyName} — {drive.jobTitle}</option>)}
-                </select>
-              </div>
-
-              <div className="tpo-application-filters">
-                <label className="tpo-search">
-                  <Search size={17} />
-                  <input value={applicationSearch} onChange={(event) => setApplicationSearch(event.target.value)} placeholder="Search applicants" aria-label="Search applicants" />
-                </label>
-                <select className="tpo-application-status-filter" value={applicationStatusFilter} onChange={(event) => setApplicationStatusFilter(event.target.value)} aria-label="Filter by application status">
-                  <option value="all">All statuses</option>
-                  <option value="applied">Applied</option>
-                  <option value="shortlisted">Shortlisted</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="selected">Selected</option>
-                </select>
-              </div>
-
-              {applicationsLoading ? <div className="tpo-empty-state">Loading applications...</div> : filteredApplications.length === 0 ? (
-                <div className="tpo-empty-state">
-                  <FileText size={34} />
-                  <h3>{applications.length ? "No matching applications" : "No applications found"}</h3>
-                  <p>{applications.length ? "Try changing your search or status filter." : "Applications submitted for the selected drive will appear here."}</p>
-                </div>
-              ) : (
-                <div className="tpo-student-list">
-                  {filteredApplications.map((application) => {
-                    const applicant = application.student || application.user || application.studentId || {};
-                    const applicantName = applicant.name || application.name || "Student";
-                    const applicantEmail = applicant.email || application.email || "Email not provided";
-                    const status = String(application.status || "applied").toLowerCase();
-                    const applicationId = application._id;
-                    return (
-                      <article className="tpo-student-card" key={applicationId}>
-                        <div className="tpo-student-heading">
-                          <div className="tpo-avatar">{applicantName.charAt(0).toUpperCase()}</div>
-                          <div className="tpo-student-identity"><h3>{applicantName}</h3><p>{applicantEmail}</p></div>
-                          <span className={`tpo-pending-badge tpo-application-status-${status}`}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>
-                        </div>
-                        <div className="tpo-student-details">
-                          <div><span>Department</span><strong>{applicant.department || "Not provided"}</strong></div>
-                          <div><span>CGPA</span><strong>{applicant.cgpa ?? "Not provided"}</strong></div>
-                          <div><span>Graduation year</span><strong>{applicant.graduationYear ?? "Not provided"}</strong></div>
-                          <div><span>Backlogs</span><strong>{applicant.backlogs ?? "Not provided"}</strong></div>
-                          <div><span>College</span><strong>{applicant.college || "Not provided"}</strong></div>
-                          <div><span>Applied on</span><strong>{application.appliedAt || application.createdAt ? new Date(application.appliedAt || application.createdAt).toLocaleDateString() : "Not available"}</strong></div>
-                        </div>
-                        <div className="tpo-student-actions">
-                          <button type="button" className="tpo-approve-button" onClick={() => handleApplicationStatus(applicationId, "shortlisted")} disabled={Boolean(processingApplicationId) || status === "shortlisted" || !applicationId}>
-                            {processingApplicationId === applicationId ? "Updating..." : "Shortlist"}
-                          </button>
-                          <button type="button" className="tpo-drive-primary" onClick={() => handleApplicationStatus(applicationId, "selected")} disabled={Boolean(processingApplicationId) || status === "selected" || !applicationId}>Select</button>
-                          <button type="button" className="tpo-reject-button" onClick={() => handleApplicationStatus(applicationId, "rejected")} disabled={Boolean(processingApplicationId) || status === "rejected" || !applicationId}>Reject</button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          </div>
-        ) : activeTab === "reports" ? (
-          <div className="tpo-content">
-            <section className="tpo-module-header">
-              <div className="tpo-module-icon"><BarChart3 size={28} /></div>
-              <div>
-                <span className="tpo-welcome-tag">PLACEMENT INSIGHTS</span>
-                <h2>Reports & Analytics</h2>
-                <p>Review application volume, selection outcomes, and performance by placement drive.</p>
-              </div>
-              <button type="button" className="tpo-module-back" onClick={loadReports} disabled={reportsLoading}>
-                <RefreshCw size={16} /> {reportsLoading ? "Analyzing..." : "Refresh analysis"}
-              </button>
-            </section>
-
-            {reportsError && <div className="tpo-alert tpo-alert-error" role="alert">{reportsError}</div>}
-            {reportsMessage && <div className="tpo-alert tpo-alert-success" role="status">{reportsMessage}</div>}
-
-            {reportsLoading ? <section className="tpo-panel"><div className="tpo-empty-state">Collecting applications and generating placement analysis...</div></section> : (
+      {activeTab === "drives" && (
+        <>
+          <PageHeader
+            title="Placement drives"
+            description="Publish drives with eligibility rules. Students can only apply when they meet every rule."
+            actions={
               <>
-                <section className="tpo-stat-grid">
-                  {[
-                    { label: "Placement Drives", value: reports.length, caption: "Drives included in this report", icon: BriefcaseBusiness, color: "tpo-icon-blue" },
-                    { label: "Total Applications", value: reports.reduce((sum, item) => sum + item.applications.length, 0), caption: "Applications across all drives", icon: FileText, color: "tpo-icon-purple" },
-                    { label: "Shortlisted", value: reports.reduce((sum, item) => sum + item.applications.filter((app) => String(app.status || "applied").toLowerCase() === "shortlisted").length, 0), caption: "Candidates progressing", icon: Users, color: "tpo-icon-orange" },
-                    { label: "Selected", value: reports.reduce((sum, item) => sum + item.applications.filter((app) => String(app.status || "").toLowerCase() === "selected").length, 0), caption: "Successful placements", icon: CheckCircle2, color: "tpo-icon-green" }
-                  ].map((stat) => {
-                    const Icon = stat.icon;
-                    return <article className="tpo-stat-card" key={stat.label}><div className="tpo-stat-top"><div className={`tpo-stat-icon ${stat.color}`}><Icon size={22} /></div></div><span className="tpo-stat-label">{stat.label}</span><strong className="tpo-stat-value">{stat.value}</strong><span className="tpo-stat-caption">{stat.caption}</span></article>;
-                  })}
-                </section>
+                <button className="btn btn-secondary" onClick={loadPlacementDrives} disabled={drivesLoading}><RefreshCw size={15} /> Refresh</button>
+                {!showDriveForm && <button className="btn btn-primary" onClick={() => setShowDriveForm(true)}><Plus size={16} /> New drive</button>}
+              </>
+            }
+          />
+          <Alert tone="error">{drivesError}</Alert>
+          <Alert tone="success">{drivesMessage}</Alert>
 
-                <section className="tpo-panel tpo-drive-list-panel">
-                  <div className="tpo-panel-heading"><div><h2>Drive-wise Analysis</h2><p>Application status breakdown and selection rate for each drive.</p></div></div>
-                  {reports.length === 0 ? <div className="tpo-empty-state"><BarChart3 size={34} /><h3>No report data available</h3><p>Create a placement drive and receive applications to see analytics.</p></div> : (
-                    <div className="tpo-drive-list">
+          {showDriveForm && (
+            <form className="panel" onSubmit={handleCreateDrive}>
+              <div className="panel-head">
+                <div><h2>New placement drive</h2><p>Fields marked * are required. Separate multiple values with commas.</p></div>
+                <button type="button" className="icon-btn icon-btn-plain" onClick={resetDriveForm} aria-label="Close form"><X size={18} /></button>
+              </div>
+              <div className="panel-body form-grid">
+                <div className="form-section">Role</div>
+                <Field label="Company name *" htmlFor="d-company"><input id="d-company" className="input" name="companyName" value={driveForm.companyName} onChange={handleDriveInput} required maxLength={120} placeholder="e.g. Infosys" /></Field>
+                <Field label="Job title *" htmlFor="d-title"><input id="d-title" className="input" name="jobTitle" value={driveForm.jobTitle} onChange={handleDriveInput} required maxLength={120} placeholder="e.g. Java Developer" /></Field>
+                <Field label="Job description *" full htmlFor="d-desc"><textarea id="d-desc" className="textarea" name="description" value={driveForm.description} onChange={handleDriveInput} required rows={3} placeholder="Responsibilities and expectations" /></Field>
+                <Field label="Package" hint="LPA" htmlFor="d-pkg"><input id="d-pkg" className="input" name="packageLPA" type="number" min="0" step="0.1" value={driveForm.packageLPA} onChange={handleDriveInput} placeholder="e.g. 6.5" /></Field>
+                <Field label="Application deadline *" htmlFor="d-deadline"><input id="d-deadline" className="input" name="applicationDeadline" type="datetime-local" value={driveForm.applicationDeadline} onChange={handleDriveInput} required /></Field>
+                <Field label="Required skills" hint="Used for resume matching" full htmlFor="d-skills"><input id="d-skills" className="input" name="requiredSkills" value={driveForm.requiredSkills} onChange={handleDriveInput} placeholder="Java, SQL, Spring Boot" /></Field>
+                <div className="form-section">Eligibility</div>
+                <Field label="Minimum CGPA *" htmlFor="d-cgpa"><input id="d-cgpa" className="input" name="minimumCgpa" type="number" min="0" max="10" step="0.01" value={driveForm.minimumCgpa} onChange={handleDriveInput} required placeholder="e.g. 7.0" /></Field>
+                <Field label="Maximum backlogs *" htmlFor="d-backlogs"><input id="d-backlogs" className="input" name="maximumBacklogs" type="number" min="0" step="1" value={driveForm.maximumBacklogs} onChange={handleDriveInput} required /></Field>
+                {collegeDepartments.length > 0 ? (
+                  <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+                    <legend style={{ marginBottom: 6 }}>Eligible departments <span className="hint">None ticked = all</span></legend>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px" }}>
+                      {collegeDepartments.map((name) => {
+                        const selected = driveForm.eligibleDepartments.split(",").map((item) => item.trim()).filter(Boolean);
+                        const checked = selected.includes(name);
+                        return (
+                          <label key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setDriveForm((current) => {
+                                const list = current.eligibleDepartments.split(",").map((item) => item.trim()).filter(Boolean);
+                                const next = checked ? list.filter((item) => item !== name) : [...list, name];
+                                return { ...current, eligibleDepartments: next.join(", ") };
+                              })}
+                            />
+                            {name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                ) : (
+                  <Field label="Eligible departments" hint="Blank = all" htmlFor="d-depts"><input id="d-depts" className="input" name="eligibleDepartments" value={driveForm.eligibleDepartments} onChange={handleDriveInput} placeholder="Computer Engineering, IT" /></Field>
+                )}
+                <Field label="Graduation years" hint="Blank = all" htmlFor="d-years"><input id="d-years" className="input" name="eligibleGraduationYears" value={driveForm.eligibleGraduationYears} onChange={handleDriveInput} placeholder="2026, 2027" /></Field>
+              </div>
+              <div className="panel-foot">
+                <button type="button" className="btn btn-secondary" onClick={resetDriveForm}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={creatingDrive}>{creatingDrive ? "Publishing…" : "Publish drive"}</button>
+              </div>
+            </form>
+          )}
+
+          <div className="panel">
+            <div className="panel-head">
+              <div><h2>All drives</h2><p>{drives.length} drive{drives.length === 1 ? "" : "s"}</p></div>
+              <label className="input-icon" style={{ flex: "0 1 320px", minWidth: 0, width: "100%" }}>
+                <Search size={15} />
+                <input className="input" value={driveSearch} onChange={(e) => setDriveSearch(e.target.value)} placeholder="Search company or role" aria-label="Search placement drives" />
+              </label>
+            </div>
+            {drivesLoading && !drives.length ? <SkeletonRows rows={4} /> : filteredDrives.length === 0 ? (
+              <Empty icon={BriefcaseBusiness} title={drives.length ? "No matching drives" : "No placement drives yet"} text={drives.length ? "Try searching by company or job title." : "Publish your first drive to make it visible to eligible students."} action={!drives.length && !showDriveForm && <button className="btn btn-primary btn-sm" onClick={() => setShowDriveForm(true)}><Plus size={15} /> New drive</button>} />
+            ) : (
+              <div className="table-wrap">
+                <table className="table table-cards">
+                  <thead>
+                    <tr><th>Drive</th><th>Package</th><th>Eligibility</th><th>Skills</th><th>Deadline</th><th>Status</th><th className="right">Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredDrives.map((drive) => (
+                      <tr key={drive._id}>
+                        <td className="td-main">
+                          <div className="cell-main">
+                            <OrgMark name={drive.companyName} />
+                            <div style={{ minWidth: 0 }}><strong>{drive.jobTitle}</strong><span>{drive.companyName}</span></div>
+                          </div>
+                        </td>
+                        <td data-label="Package">{drive.packageLPA == null ? "—" : `${drive.packageLPA} LPA`}</td>
+                        <td data-label="Eligibility">
+                          <span>CGPA ≥ {drive.minimumCgpa} · Backlogs ≤ {drive.maximumBacklogs}</span>
+                          <span className="muted" style={{ display: "block" }}>{drive.eligibleDepartments?.length ? drive.eligibleDepartments.join(", ") : "All departments"}{drive.eligibleGraduationYears?.length ? ` · ${drive.eligibleGraduationYears.join(", ")}` : ""}</span>
+                        </td>
+                        <td data-label="Skills" style={{ maxWidth: 220 }}>{drive.requiredSkills?.length ? drive.requiredSkills.join(", ") : "—"}</td>
+                        <td data-label="Deadline" style={{ whiteSpace: "nowrap" }}>{formatDate(drive.applicationDeadline)}</td>
+                        <td data-label="Status"><StatusBadge status={driveStatus(drive)} /></td>
+                        <td data-label="Actions">
+                          <div className="row-actions">
+                            <button className="btn btn-secondary btn-sm" onClick={() => { setSelectedDriveId(drive._id); setActiveTab("applications"); }}>Applicants</button>
+                            <button className="icon-btn" onClick={() => handleDeleteDrive(drive)} disabled={Boolean(deletingDriveId)} title="Delete drive" aria-label={`Delete ${drive.companyName} drive`} style={{ color: "var(--danger)" }}>
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === "companies" && (
+        <>
+          <PageHeader
+            title="Companies"
+            description="Every company that has run a drive with your placement cell, with its roles, best package and skills sought."
+            actions={<button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> New drive</button>}
+          />
+          <div className="panel">
+            <div className="panel-head">
+              <div><h2>Recruiting companies</h2><p>{companies.length} compan{companies.length === 1 ? "y" : "ies"}</p></div>
+              <label className="input-icon" style={{ flex: "0 1 320px", minWidth: 0, width: "100%" }}>
+                <Search size={15} />
+                <input className="input" value={companySearch} onChange={(e) => setCompanySearch(e.target.value)} placeholder="Search companies" aria-label="Search companies" />
+              </label>
+            </div>
+            {drivesLoading && !drives.length ? <SkeletonRows rows={4} /> : companies.length === 0 ? (
+              <Empty icon={Building2} title="No companies yet" text="Companies are listed here once you publish a drive for them." />
+            ) : (
+              <div className="table-wrap">
+                <table className="table table-cards">
+                  <thead><tr><th>Company</th><th>Roles</th><th>Drives</th><th>Best package</th><th>Skills sought</th></tr></thead>
+                  <tbody>
+                    {companies.map((company) => {
+                      const active = company.drives.filter((d) => d.status !== "closed" && !isExpired(d)).length;
+                      return (
+                        <tr key={company.name}>
+                          <td className="td-main">
+                            <div className="cell-main">
+                              <OrgMark name={company.name} />
+                              <div style={{ minWidth: 0 }}><strong>{company.name}</strong><span>{active ? `${active} open drive${active === 1 ? "" : "s"}` : "No open drives"}</span></div>
+                            </div>
+                          </td>
+                          <td data-label="Roles">{[...company.roles].join(", ")}</td>
+                          <td data-label="Drives">{company.drives.length}</td>
+                          <td data-label="Best package">{company.maxPackage == null ? "—" : `${company.maxPackage} LPA`}</td>
+                          <td data-label="Skills sought" style={{ maxWidth: 280 }}>{company.skills.size ? [...company.skills].slice(0, 8).join(", ") : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === "applications" && (
+        <>
+          <PageHeader
+            title="Applicants & interviews"
+            description="Shortlist applicants for interview, then record the final decision for each drive."
+            actions={<button className="btn btn-secondary" onClick={loadApplicationsWorkspace} disabled={applicationsLoading}><RefreshCw size={15} /> Refresh</button>}
+          />
+          <Alert tone="error">{applicationsError}</Alert>
+          <Alert tone="success">{applicationsMessage}</Alert>
+
+          <div className="panel">
+            <div className="panel-body toolbar" style={{ paddingBottom: 12 }}>
+              <select
+                className="select"
+                style={{ flex: "1 1 300px" }}
+                value={selectedDriveId}
+                onChange={(event) => {
+                  const driveId = event.target.value;
+                  setSelectedDriveId(driveId);
+                  loadDriveApplications(driveId, drives);
+                }}
+                aria-label="Placement drive"
+              >
+                <option value="">Select a placement drive</option>
+                {drives.map((drive) => <option key={drive._id} value={drive._id}>{drive.companyName} — {drive.jobTitle}</option>)}
+              </select>
+              <label className="input-icon">
+                <Search size={15} />
+                <input className="input" value={applicationSearch} onChange={(e) => setApplicationSearch(e.target.value)} placeholder="Search applicants" aria-label="Search applicants" />
+              </label>
+            </div>
+            <div className="tabs" role="tablist" aria-label="Filter by status" style={{ padding: "0 8px" }}>
+              {[
+                ["all", "All", applications.length],
+                ["applied", "Applied", statusCount("applied")],
+                ["shortlisted", "Interview", statusCount("shortlisted")],
+                ["selected", "Selected", statusCount("selected")],
+                ["rejected", "Rejected", statusCount("rejected")]
+              ].map(([value, text, n]) => (
+                <button key={value} role="tab" aria-selected={applicationStatusFilter === value} className={applicationStatusFilter === value ? "active" : ""} onClick={() => setApplicationStatusFilter(value)}>
+                  {text} <span className="count">{n}</span>
+                </button>
+              ))}
+            </div>
+
+            {applicationsLoading ? <SkeletonRows rows={4} /> : filteredApplications.length === 0 ? (
+              <Empty icon={ClipboardList} title={applications.length ? "No matching applicants" : "No applications yet"} text={applications.length ? "Try another search or status." : "Applications for the selected drive appear here."} />
+            ) : (
+              <div className="table-wrap">
+                <table className="table table-cards">
+                  <thead>
+                    <tr><th>Applicant</th><th>Department</th><th>CGPA</th><th>Batch</th><th>Applied</th><th>Status</th><th className="right">Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {filteredApplications.map((application) => {
+                      const applicant = application.student || application.user || application.studentId || {};
+                      const name = applicant.name || application.name || "Student";
+                      const status = String(application.status || "applied").toLowerCase();
+                      const id = application._id;
+                      const busy = Boolean(processingApplicationId) || !id;
+                      return (
+                        <tr key={id}>
+                          <td className="td-main">
+                            <div className="cell-main">
+                              <Avatar name={name} size="sm" />
+                              <div style={{ minWidth: 0 }}><strong>{name}</strong><span>{applicant.email || application.email || "—"}</span></div>
+                            </div>
+                          </td>
+                          <td data-label="Department">{applicant.department || "—"}</td>
+                          <td data-label="CGPA">{applicant.cgpa ?? "—"}</td>
+                          <td data-label="Batch">{applicant.graduationYear ?? "—"}</td>
+                          <td data-label="Applied">{formatDate(application.appliedAt || application.createdAt)}</td>
+                          <td data-label="Status"><StatusBadge status={status} /></td>
+                          <td data-label="Actions">
+                            <div className="row-actions">
+                              <button className="icon-btn" title="Shortlist for interview" aria-label={`Shortlist ${name} for interview`} disabled={busy || status === "shortlisted"} onClick={() => handleApplicationStatus(id, "shortlisted")}><Star size={15} /></button>
+                              <button className="icon-btn" title="Mark as selected" aria-label={`Select ${name}`} disabled={busy || status === "selected"} onClick={() => handleApplicationStatus(id, "selected")} style={{ color: "var(--success)" }}><Trophy size={15} /></button>
+                              <button className="icon-btn" title="Reject" aria-label={`Reject ${name}`} disabled={busy || status === "rejected"} onClick={() => handleApplicationStatus(id, "rejected")} style={{ color: "var(--danger)" }}><X size={15} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {activeTab === "reports" && (
+        <>
+          <PageHeader
+            title="Reports"
+            description="Applications, interview shortlists and selections across every placement drive."
+            actions={<button className="btn btn-secondary" onClick={loadReports} disabled={reportsLoading}><RefreshCw size={15} /> {reportsLoading ? "Generating…" : "Refresh"}</button>}
+          />
+          <Alert tone="warning">{reportsError}</Alert>
+          <Alert tone="success">{reportsMessage}</Alert>
+
+          <Summary
+            loading={reportsLoading}
+            items={[
+              ["Drives", reports.length, "Included in this report"],
+              ["Applications", reportTotals.applications, "Across all drives"],
+              ["Interview", reportTotals.status("shortlisted"), "Currently shortlisted"],
+              ["Selected", reportTotals.status("selected"), "Successful placements"]
+            ]}
+          />
+
+          <section className="grid grid-main-side">
+            <div className="panel">
+              <div className="panel-head"><div><h2>By drive</h2><p>Status breakdown and selection rate.</p></div></div>
+              {reportsLoading ? <SkeletonRows rows={4} /> : reports.length === 0 ? (
+                <Empty icon={BarChart3} title="No report data yet" text="Publish a drive and receive applications to see results here." />
+              ) : (
+                <div className="table-wrap">
+                  <table className="table table-cards">
+                    <thead><tr><th>Drive</th><th className="right">Applied</th><th className="right">Interview</th><th className="right">Selected</th><th className="right">Rejected</th><th style={{ minWidth: 150 }}>Selection rate</th></tr></thead>
+                    <tbody>
                       {reports.map(({ drive, applications: apps, error }) => {
                         const count = (status) => apps.filter((app) => String(app.status || "applied").toLowerCase() === status).length;
                         const selected = count("selected");
                         const rate = apps.length ? Math.round((selected / apps.length) * 100) : 0;
-                        return <article className="tpo-drive-card" key={drive._id}>
-                          <div className="tpo-drive-card-top"><div><h3>{drive.companyName || "Company"}</h3><p>{drive.jobTitle || "Placement drive"}</p></div><span className="tpo-drive-status">{apps.length} applications</span></div>
-                          {error && <p className="tpo-alert tpo-alert-error">{error}</p>}
-                          <div className="tpo-drive-details">
-                            <div><span>Applied</span><strong>{count("applied")}</strong></div>
-                            <div><span>Shortlisted</span><strong>{count("shortlisted")}</strong></div>
-                            <div><span>Rejected</span><strong>{count("rejected")}</strong></div>
-                            <div><span>Selected</span><strong>{selected}</strong></div>
-                            <div><span>Selection rate</span><strong>{rate}%</strong></div>
-                            <div><span>Package</span><strong>{drive.packageLPA == null ? "Not specified" : `${drive.packageLPA} LPA`}</strong></div>
-                          </div>
-                          <div className="tpo-student-actions"><button type="button" className="tpo-module-back" onClick={() => { setActiveTab("applications"); setSelectedDriveId(drive._id); }}>View applications</button></div>
-                        </article>;
+                        return (
+                          <tr key={drive._id}>
+                            <td className="td-main">
+                              <button className="cell-main cell-link" onClick={() => { setSelectedDriveId(drive._id); setActiveTab("applications"); }}>
+                                <OrgMark name={drive.companyName} />
+                                <div style={{ minWidth: 0 }}><strong>{drive.jobTitle}</strong><span>{drive.companyName}{error ? " · data incomplete" : ""}</span></div>
+                              </button>
+                            </td>
+                            <td data-label="Applied" className="right">{apps.length}</td>
+                            <td data-label="Interview" className="right">{count("shortlisted")}</td>
+                            <td data-label="Selected" className="right">{selected}</td>
+                            <td data-label="Rejected" className="right">{count("rejected")}</td>
+                            <td data-label="Selection rate">
+                              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 120, flex: 1, justifyContent: "flex-end" }}>
+                                <div style={{ flex: 1, maxWidth: 120 }}><Bar value={rate} tone="success" /></div>
+                                <strong className="num" style={{ fontSize: 13, minWidth: 34, textAlign: "right" }}>{rate}%</strong>
+                              </div>
+                            </td>
+                          </tr>
+                        );
                       })}
-                    </div>
-                  )}
-                </section>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="tpo-content">
-            <section className="tpo-module-header"><div className="tpo-module-icon"><ActiveIcon size={28} /></div><div><span className="tpo-welcome-tag">MANAGEMENT MODULE</span><h2>{activeItem?.label}</h2><p>Manage and review information in the {activeItem?.label.toLowerCase()} workspace.</p></div></section>
-            <section className="tpo-panel tpo-module-panel"><div className="tpo-module-panel-icon"><Search size={27} /></div><h3>{activeItem?.label}</h3><p>This section needs to be connected to the corresponding backend functionality before it can display and manage live records.</p><button className="tpo-module-back" onClick={() => setActiveTab("overview")}><LayoutDashboard size={17} />Back to Overview</button></section>
-          </div>
-        )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
-        <footer className="tpo-footer">
-          <span>© PlacementHub</span>
-          <span>AI-Driven Placement Management System</span>
-        </footer>
-      </main>
-    </div>
+            <div className="panel">
+              <div className="panel-head"><div><h2>Conversion</h2><p>Share of all applications.</p></div></div>
+              <div className="panel-body meters">
+                {[
+                  ["Applications received", reportTotals.applications, ""],
+                  ["Reached interview", reportTotals.status("shortlisted") + reportTotals.status("selected"), "warning"],
+                  ["Selected", reportTotals.status("selected"), "success"],
+                  ["Rejected", reportTotals.status("rejected"), "danger"]
+                ].map(([name, value, tone]) => (
+                  <div className="meter-row" key={name}>
+                    <span>{name}</span><strong>{value}</strong>
+                    <Bar value={reportTotals.applications ? (value / reportTotals.applications) * 100 : 0} tone={tone} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+    </AppShell>
   );
 }

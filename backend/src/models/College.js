@@ -23,6 +23,10 @@ const collegeSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    departments: {
+      type: [String],
+      default: []
+    },
     status: {
       type: String,
       enum: ["pending", "verified", "rejected"],
