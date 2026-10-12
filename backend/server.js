@@ -19,7 +19,7 @@ const app = express();
 // so rate limiting counts each visitor separately.
 app.set("trust proxy", 1);
 
-const frontendUrl = (process.env.FRONTEND_URL || "http://placement-hub-liard.vercel.app/api").replace(/\/+$/, "");
+const frontendUrl = (process.env.FRONTEND_URL || "https://placement-hub-liard.vercel.app").replace(/\/+$/, "");
 
 app.use(cors({ origin: frontendUrl }));
 app.use(express.json());
