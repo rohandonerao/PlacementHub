@@ -1,7 +1,9 @@
 import "dotenv/config";
+
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
+
 import authRoutes from "./src/routes/auth.js";
 import profileRoutes from "./src/routes/profile.js";
 import resumeRoutes from "./src/routes/resume.js";
@@ -9,22 +11,62 @@ import driveRoutes from "./src/routes/drives.js";
 import eligibilityRoutes from "./src/routes/eligibility.js";
 import applicationRoutes from "./src/routes/applications.js";
 import studentsRoutes from "./src/routes/students.js";
-import PlacementDrive from "./src/models/PlacementDrive.js";
 import adminRoutes from "./src/routes/admin.js";
 
+import PlacementDrive from "./src/models/PlacementDrive.js";
 
 const app = express();
 
-// Hosts like Render sit behind a proxy; this makes req.ip the real client IP
-// so rate limiting counts each visitor separately.
 app.set("trust proxy", 1);
 
-const frontendUrl = (process.env.FRONTEND_URL || "https://placement-hub-liard.vercel.app").replace(/\/+$/, "");
+const frontendUrl = (process.env.FRONTEND_URL || "http://placement-hub-liard.vercel.app/api").replace(/\/+$/, "");
 
-app.use(cors({ origin: frontendUrl }));
-app.use(express.json());
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
-app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+app.use(express.json({ limit: "10mb" }));
+
+let connectionPromise = null;
+
+async function connectDB() {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  if (!process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is not configured.");
+  }
+
+  if (!connectionPromise) {
+    connectionPromise = mongoose.connect(process.env.MONGODB_URI)
+      .catch((error) => {
+        connectionPromise = null;
+        throw error;
+      });
+  }
+
+  await connectionPromise;
+}
+
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection failed:", error.message);
+
+    res.status(503).json({
+      message: "Database connection failed. Please try again later."
+    });
+  }
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
@@ -36,26 +78,31 @@ app.use("/api/students", studentsRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.use("/api", (req, res) => {
-  res.status(404).json({ message: "API route not found." });
+  res.status(404).json({
+    message: "API route not found."
+  });
 });
 
-// Always answer with JSON and never expose stack traces or server paths.
 app.use((error, req, res, next) => {
   if (error.type === "entity.parse.failed") {
-    return res.status(400).json({ message: "The request body is not valid JSON." });
+    return res.status(400).json({
+      message: "The request body is not valid JSON."
+    });
   }
 
   if (error.type === "entity.too.large") {
-    return res.status(413).json({ message: "The request is too large." });
+    return res.status(413).json({
+      message: "The request is too large."
+    });
   }
 
-  console.error("Unhandled error:", error);
+  console.error("Unhandled error:", error.message);
 
-  return res.status(500).json({ message: "Something went wrong. Please try again." });
+  return res.status(500).json({
+    message: "Something went wrong. Please try again."
+  });
 });
 
-// Drives stay in the database after their deadline so TPOs can keep
-// shortlisting and selecting applicants; they are only closed to new applications.
 async function closeExpiredPlacementDrives() {
   try {
     const result = await PlacementDrive.updateMany(
@@ -63,30 +110,22 @@ async function closeExpiredPlacementDrives() {
         applicationDeadline: { $lte: new Date() },
         status: "open"
       },
-      { $set: { status: "closed" } }
+      {
+        $set: { status: "closed" }
+      }
     );
 
     if (result.modifiedCount > 0) {
-      console.log(`Automatic close: ${result.modifiedCount} placement drive(s) passed their deadline.`);
+      console.log(
+        `Automatic close: ${result.modifiedCount} placement drive(s) passed their deadline.`
+      );
     }
   } catch (error) {
-    console.error("Automatic expired-drive close failed:", error.message);
+    console.error(
+      "Automatic expired-drive close failed:",
+      error.message
+    );
   }
 }
 
-const port = process.env.PORT || 5000;
-
-try {
-  await mongoose.connect(process.env.MONGODB_URI);
-  console.log("Connected to MongoDB");
-
-  await closeExpiredPlacementDrives();
-  setInterval(closeExpiredPlacementDrives, 60 * 1000);
-
-  app.listen(port, () => {
-    console.log(`Backend running at http://localhost:${port}`);
-  });
-} catch (error) {
-  console.error("Could not connect to MongoDB:", error.message);
-  process.exit(1);
-}
+export default app;
